@@ -17,6 +17,11 @@
 //#define CAMERA_MODEL_M5STACK_WIDE
 #define CAMERA_MODEL_AI_THINKER
 
+//including Servo Lib
+//Refer to https://github.com/espressif/esp32-camera/issues/112 for alternate Serve Lib with configurable Timer Channels:
+//https://github.com/RoboticsBrno/ServoESP32.git included via git submodule
+#include <Servo.h>
+
 #include "camera_pins.h"
 #include "myConfig.h"
 
@@ -32,6 +37,14 @@ void checkConnection();
 
 const char* appVersion = "2.0";
 
+//Servo configuration
+Servo ServoRotate;
+Servo ServoTilt;
+const int servoRotatePin = 1;
+const int servoTiltPin = 3;
+extern int ValCamTilt, ValCamRotate;
+bool debug = false;
+
 // fastest clock rate is changed for release v1.0.5
 #ifdef USE_v104
 #define XCLK_MHZ 10
@@ -40,9 +53,11 @@ const char* appVersion = "2.0";
 #endif
 
 void setup() {
-  Serial.begin(115200);
-  Serial.setDebugOutput(true);
-  Serial.println();
+  if (debug) {
+    Serial.begin(115200);
+    Serial.setDebugOutput(true);
+    Serial.println();
+  }
 
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -87,7 +102,7 @@ void setup() {
   while (retries && err != ESP_OK) {
     err = esp_camera_init(&config);
     if (err != ESP_OK) {
-      Serial.printf("Camera init failed with error 0x%x", err);
+      if (debug) Serial.printf("Camera init failed with error 0x%x", err);
       digitalWrite(PWDN_GPIO_NUM, 1);
       delay(100);
       digitalWrite(PWDN_GPIO_NUM, 0); // power cycle the camera (OV2640)
@@ -95,7 +110,7 @@ void setup() {
     }
   } 
   if (err != ESP_OK) ESP.restart();
-  else Serial.println("Camera init OK");
+  else if (debug) Serial.println("Camera init OK");
 
   sensor_t * s = esp_camera_sensor_get();
   //initial sensors are flipped vertically and colors are a bit saturated
@@ -116,13 +131,13 @@ void setup() {
   
   //Connect wifi and start config AP if fail
   if(!startWifi()){
-    Serial.println("Failed to start wifi, restart after 10 secs");
+    if (debug) Serial.println("Failed to start wifi, restart after 10 secs");
     delay(10000);
     ESP.restart();
   }
   
   if (!prepMjpeg()) {
-    Serial.println("Unable to continue, SD card fail, restart after 10 secs");
+    if (debug) Serial.println("Unable to continue, SD card fail, restart after 10 secs");
     delay(10000);
     ESP.restart();
   }
@@ -130,18 +145,23 @@ void setup() {
   startCameraServer();
   OTAsetup();
   startSDtasks();
-  if (prepDS18()) Serial.println("DS18B20 device available");
-  else Serial.println("DS18B20 device not present"); 
+  if (prepDS18() && debug) Serial.println("DS18B20 device available");
+  else if (debug) Serial.println("DS18B20 device not present"); 
   
   String wifiIP = (WiFi.getMode() == WIFI_AP) ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
-  Serial.printf("Free DRAM: %u, free pSRAM %u\n", ESP.getFreeHeap(), ESP.getFreePsram());
-  Serial.printf("Camera Ready @ %uMHz, version %s. Use 'http://%s' to connect\n", XCLK_MHZ, appVersion, wifiIP.c_str());
+  if (debug) Serial.printf("Free DRAM: %u, free pSRAM %u\n", ESP.getFreeHeap(), ESP.getFreePsram());
+  if (debug) Serial.printf("Camera Ready @ %uMHz, version %s. Use 'http://%s' to connect\n", XCLK_MHZ, appVersion, wifiIP.c_str());
+
+  //Servo setup
+  ServoRotate.attach(servoRotatePin, 2, 0, 180, 544, 2400);
+  ServoTilt.attach(servoTiltPin, 3, 0, 180, 544, 2400);
 }
 
 void loop() {
   //Check connection
-  checkConnection();                    
-  if (!OTAlistener()) delay(100000);
+  checkConnection();
+  Servos();              
+  if (!OTAlistener()) delay(10000);
 }
 
 uint8_t fsizeLookup(uint8_t lookup, bool old2new) {
@@ -153,4 +173,16 @@ uint8_t fsizeLookup(uint8_t lookup, bool old2new) {
   lookup = (old2new) ? oldNewData[lookup] : newOldData[lookup]; // read : set
 #endif
   return lookup;
+}
+
+void Servos() {
+  if (debug) { 
+    Serial.print("ValCamTilt : ");
+	  Serial.println(ValCamTilt);
+    Serial.print("ValCamRotate : ");
+    Serial.println(ValCamRotate);
+  }
+  ServoTilt.write(ValCamTilt);
+  ServoRotate.write(ValCamRotate);
+
 }

@@ -535,6 +535,18 @@ const char* index_ov2640_html = R"~(
                                   <label class="slider" for="dbgMotion"></label>
                               </div>
                           </div>
+                          <div class="input-group" id="CamTilt-group">
+                              <label for="CamTilt">Control CamTilt</label>
+                              <div class="range-min">0</div>
+                                  <input type="range" id="CamTilt" min="0" max="180" value="90" class="default-action">
+                              <div class="range-max">180</div>
+                          </div>
+                          <div class="input-group" id="CamRotate-group">
+                              <label for="CamRotate">Control CamRotate</label>
+                              <div class="range-min">0</div>
+                                  <input type="range" id="CamRotate" min="0" max="180" value="90" class="default-action">
+                              <div class="range-max">180</div>
+                          </div>
                        </div>
                      </nav>
                      <nav class="menu">                                                                

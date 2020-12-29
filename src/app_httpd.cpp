@@ -59,7 +59,7 @@ extern bool stopPlayback;
 extern SemaphoreHandle_t frameMutex;
 extern SemaphoreHandle_t motionMutex;
 extern bool lampVal;
-extern char* appVersion;                        
+extern char* appVersion;
 
 void listDir(const char* fname, char* htmlBuff);
 uint8_t setFPSlookup(uint8_t val);
@@ -72,6 +72,7 @@ void controlLamp(bool lampVal);
 float readDStemp(bool isCelsius);
 String upTime();
 uint8_t fsizeLookup(uint8_t lookup, bool old2new);
+void Servos();
 
 void deleteFolderOrFile(const char* val);
 void createUploadTask(const char* val,bool move=false);
@@ -79,6 +80,8 @@ void syncToBrowser(char *val);
 //Config file
 bool saveConfig();
 void resetConfig();
+
+int ValCamTilt = 90, ValCamRotate = 90;
 
 
 // status & control fields 
@@ -97,7 +100,7 @@ static esp_err_t capture_handler(httpd_req_t *req){
 
     fb = esp_camera_fb_get();
     if (!fb) {
-        Serial.println("Camera capture failed");
+        if (debug) Serial.println("Camera capture failed");
         httpd_resp_send_500(req);
         return ESP_FAIL;
     }
@@ -110,7 +113,7 @@ static esp_err_t capture_handler(httpd_req_t *req){
     res = httpd_resp_send(req, (const char *)fb->buf, fb->len); 
     esp_camera_fb_return(fb);
     int64_t fr_end = esp_timer_get_time();
-    Serial.printf("JPG: %uB %ums\n", (uint32_t)(fb_len), (uint32_t)((fr_end - fr_start)/1000));
+    if (debug) Serial.printf("JPG: %uB %ums\n", (uint32_t)(fb_len), (uint32_t)((fr_end - fr_start)/1000));
     return res;
 }
 
@@ -153,7 +156,7 @@ static esp_err_t stream_handler(httpd_req_t *req) {
         xSemaphoreTake(frameMutex, portMAX_DELAY); 
         fb = esp_camera_fb_get();
         if (!fb) {
-          Serial.println("Camera capture failed");
+          if (debug) Serial.println("Camera capture failed");
           res = ESP_FAIL;
         } else {
           jpg_len = fb->len;
@@ -202,12 +205,12 @@ static void urlDecode(char* saveVal, const char* urlVal) {
 }
 
 bool formatMMC(){
-    Serial.print("Formating card..");
+    if (debug) Serial.print("Formating card..");
     bool formatted = SPIFFS.format();
     if(formatted){
-      Serial.println("\nSuccess formatting card");
+      if (debug) Serial.println("\nSuccess formatting card");
     }else{
-      Serial.println("\nError formatting card");
+      if (debug) Serial.println("\nError formatting card");
     }
     return formatted;
 }                
@@ -233,7 +236,7 @@ static esp_err_t cmd_handler(httpd_req_t *req){
          
     free(buf);
     if (res != ESP_OK) {    
-      Serial.println("Failed to parse command query");    
+      if (debug) Serial.println("Failed to parse command query");    
       httpd_resp_send_404(req);
       return ESP_FAIL;
     }
@@ -258,7 +261,7 @@ static esp_err_t cmd_handler(httpd_req_t *req){
     else if(!strcmp(variable, "minf")) minSeconds = val;
     else if(!strcmp(variable, "dbg")) {
       debug = (val) ? true : false;
-      Serial.setDebugOutput(debug);
+      if (debug) Serial.setDebugOutput(debug);
     }
     else if(!strcmp(variable, "updateFPS")) {
       fsizePtr = val;
@@ -329,6 +332,22 @@ static esp_err_t cmd_handler(httpd_req_t *req){
     else if(!strcmp(variable, "special_effect")) res = s->set_special_effect(s, val);
     else if(!strcmp(variable, "wb_mode")) res = s->set_wb_mode(s, val);
     else if(!strcmp(variable, "ae_level")) res = s->set_ae_level(s, val);
+    else if(!strcmp(variable, "CamTilt")) {
+      ValCamTilt = val;
+      Servos();
+      if (debug) {
+        Serial.print("ValCamTilt du cpp : ");
+        Serial.println(ValCamTilt);
+      }
+    }
+    else if(!strcmp(variable, "CamRotate")) {
+      ValCamRotate = val;
+      Servos();
+      if (debug) {
+        Serial.print("ValCamRotate du cpp : ");
+        Serial.println(ValCamRotate);
+      }
+    }
     else res = ESP_FAIL;
           
     if (res != ESP_OK) return httpd_resp_send_500(req);
@@ -424,7 +443,10 @@ static esp_err_t status_handler(httpd_req_t *req){
     p+=sprintf(p, "\"up_time\":\"%s\",", upTime().c_str());   
     p+=sprintf(p, "\"free_heap\":\"%u KB\",", (ESP.getFreeHeap() / 1024));    
     p+=sprintf(p, "\"wifi_rssi\":\"%i dBm\",", WiFi.RSSI() );  
-    p+=sprintf(p, "\"fw_version\":\"%s\"", appVersion);  
+    p+=sprintf(p, "\"fw_version\":\"%s\"", appVersion);
+    //Servo parameters
+    p+=sprintf(p, "\"CamTilt\":%u,", ValCamTilt);
+    p+=sprintf(p, "\"CamRotate\":%u,", ValCamRotate);  
     *p++ = '}';
     *p++ = 0;
     httpd_resp_set_type(req, "application/json");

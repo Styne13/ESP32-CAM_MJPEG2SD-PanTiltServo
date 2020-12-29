@@ -27,7 +27,7 @@ extern char timezone[]; // Defined in myConfig.h
 #include "esp_camera.h"
 
 // user parameters
-bool debug = false;
+extern bool debug;
 bool debugMotion = false;
 extern bool doRecording;// = true; // whether to capture to SD or not
 extern uint8_t minSeconds;// = 5; // default min video length (includes POST_MOTION_TIME)
@@ -147,8 +147,8 @@ void createUploadTask(const char* val, bool move = false);
 uint8_t fsizeLookup(uint8_t lookup, bool old2new);       
 
 // auto newline printf
-#define showInfo(format, ...) Serial.printf(format "\n", ##__VA_ARGS__)
-#define showError(format, ...) Serial.printf("ERROR: " format "\n", ##__VA_ARGS__)
+#define showInfo(format, ...) if (debug) Serial.printf(format "\n", ##__VA_ARGS__)
+#define showError(format, ...) if (debug) Serial.printf("ERROR: " format "\n", ##__VA_ARGS__)
 #define showDebug(format, ...) if (debug) Serial.printf("DEBUG: " format "\n", ##__VA_ARGS__)
 
 /************************** NTP  **************************/
@@ -193,7 +193,7 @@ void syncToBrowser(char *val){
   if(timeSynchronized) return;
   
   //Synchronize to browser time, On access point connections with no internet
-  Serial.printf("Sync clock to: %s with tz:%s\n", val, timezone);
+  if (debug) Serial.printf("Sync clock to: %s with tz:%s\n", val, timezone);
   struct tm now;
   getLocalTime(&now,0);
   
@@ -213,9 +213,9 @@ void syncToBrowser(char *val){
   struct timezone utc = {0,0};      
   settimeofday(&epoch, &utc);
   //setenv("TZ", timezone, 1);
-  Serial.print(&now,"Before sync: %B %d %Y %H:%M:%S (%A) ");
+  if (debug) Serial.print(&now,"Before sync: %B %d %Y %H:%M:%S (%A) ");
   getLocalTime(&now,0);
-  Serial.println(&now,"After sync: %B %d %Y %H:%M:%S (%A)");     
+  if (debug) Serial.println(&now,"After sync: %B %d %Y %H:%M:%S (%A)");     
  }
 
 /*********************** Utility functions ****************************/
@@ -224,10 +224,10 @@ void showProgress() {
   // show progess if not verbose
   static uint8_t dotCnt = 0;
   if (!debug) {
-    Serial.print("."); // progress marker
+    if (debug) Serial.print("."); // progress marker
     if (++dotCnt >= 50) {
       dotCnt = 0;
-      Serial.println("");
+      if (debug) Serial.println("");
     }
   }
 }
@@ -351,10 +351,12 @@ static void saveFrame() {
 bool checkFreeSpace() { //Check for sufficient space in card
   if (freeSpaceMode < 1) return false;
   unsigned long freeSize = (unsigned long)( (SD_MMC.totalBytes() - SD_MMC.usedBytes()) / 1048576);
-  Serial.print("Card free space: "); Serial.println(freeSize);
+  if (debug) Serial.print("Card free space: ");
+  if (debug) Serial.println(freeSize);
   if (freeSize < minCardFreeSpace) {
     String oldestDir = getOldestDir();
-    Serial.print("Oldest dir to delete: "); Serial.println(oldestDir);
+    if (debug) Serial.print("Oldest dir to delete: ");
+    if (debug) Serial.println(oldestDir);
     if (freeSpaceMode == 1) { //Delete oldest folder
       deleteFolderOrFile(oldestDir.c_str());
     } else if (freeSpaceMode == 2) { //Upload and then delete oldest folder
@@ -807,7 +809,7 @@ void stopPlaying() {
     uint32_t timeOut = millis();
     while (isPlaying && millis()-timeOut < 2000) delay(10); 
     if (isPlaying) {
-      Serial.println();
+      if (debug) Serial.println();
       showInfo("Failed to cleanly close playback");
       doPlayback = false;
       setFPS(saveFPS);
@@ -889,18 +891,18 @@ void deleteFolderOrFile(const char * val) {
     showInfo("Directory %s contents", val);
     File file = f.openNextFile();
     while(file){
-        if(file.isDirectory()){
+        if(file.isDirectory() && debug){
             Serial.print("  DIR : ");
             Serial.println(file.name());
         } else {
-            Serial.print("  FILE: ");
-            Serial.print(file.name());
-            Serial.print("  SIZE: ");
-            Serial.print(file.size());
+            if (debug) Serial.print("  FILE: ");
+            if (debug) Serial.print(file.name());
+            if (debug) Serial.print("  SIZE: ");
+            if (debug) Serial.print(file.size());
             if(SD_MMC.remove(file.name())){
-              Serial.println(" deleted.");
+              if (debug) Serial.println(" deleted.");
             }else{
-              Serial.println(" FAILED.");
+              if (debug) Serial.println(" FAILED.");
             }
         }
         file = f.openNextFile();
@@ -910,7 +912,7 @@ void deleteFolderOrFile(const char * val) {
     if(SD_MMC.rmdir(val)){
        showInfo("Dir %s removed", val);
     } else {
-       Serial.println("Remove dir failed");
+       if (debug) Serial.println("Remove dir failed");
     }  
     
   }else{  
@@ -918,7 +920,7 @@ void deleteFolderOrFile(const char * val) {
     if(SD_MMC.remove(val)){
        showInfo("File %s deleted", val);
     } else {
-       Serial.println("Delete failed");
+       if (debug) Serial.println("Delete failed");
     }  
   }
 }
@@ -934,8 +936,8 @@ bool prepMjpeg() {
       SDbuffer = (uint8_t*)ps_malloc(MAX_JPEG); // buffer frame to store in SD
       htmlBuff = (char*)ps_malloc(htmlBuffLen); 
       if (USE_PIR) {
-        PIRpin = (ONELINE) ? 12 : 33;
-        pinMode(PIRpin, INPUT_PULLDOWN); // pulled high for active
+        PIRpin = (ONELINE) ? 0 : 0;
+        pinMode(PIRpin, INPUT_PULLUP); // pulled high for active
       }
       pinMode(LAMPpin, OUTPUT);
       readSemaphore = xSemaphoreCreateBinary();
